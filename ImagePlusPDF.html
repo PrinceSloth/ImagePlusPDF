@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Image Inserter</title>
+    <!-- Import pdf-lib from CDN for client-side PDF manipulation -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
+    <style>
+        /* Dark Mode Theme Variables */
+        :root {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --muted-text: #a0a0a0;
+            --primary-color: #bb86fc;
+            --primary-hover: #9b59b6;
+            --border-color: #333333;
+            --input-bg: #2d2d2d;
+            --error-color: #cf6679;
+            --success-color: #03dac6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            color: var(--primary-color);
+            font-size: 1.8rem;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .sub-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--muted-text);
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            cursor: pointer;
+        }
+
+        input[type="file"]::file-selector-button {
+            background-color: #444;
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            margin-right: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background-color: #555;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.9rem;
+            background-color: var(--primary-color);
+            color: #121212;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            margin-top: 1rem;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #555;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-weight: bold;
+            min-height: 24px;
+        }
+
+        .error {
+            color: var(--error-color);
+        }
+
+        .success {
+            color: var(--success-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>PDF Image Inserter</h1>
+        
+        <div class="form-group">
+            <label for="pdfInput">1. Select Existing PDF</label>
+            <span class="sub-label">Required</span>
+            <input type="file" id="pdfInput" accept="application/pdf">
+        </div>
+        
+        <div class="form-group">
+            <label for="startImageInput">2. Images at the Beginning</label>
+            <span class="sub-label">Optional — Pages will be added before page 1</span>
+            <input type="file" id="startImageInput" accept="image/png, image/jpeg" multiple>
+        </div>
+
+        <div class="form-group">
+            <label for="endImageInput">3. Images at the End</label>
+            <span class="sub-label">Optional — Pages will be added after the last page</span>
+            <input type="file" id="endImageInput" accept="image/png, image/jpeg" multiple>
+        </div>
+        
+        <button id="processBtn">Merge and Download</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        document.getElementById('processBtn').addEventListener('click', async () => {
+            const pdfInput = document.getElementById('pdfInput');
+            const startImageInput = document.getElementById('startImageInput');
+            const endImageInput = document.getElementById('endImageInput');
+            const processBtn = document.getElementById('processBtn');
+
+            // 1. Validate inputs
+            if (!pdfInput.files.length) {
+                showStatus('Please select a base PDF file.', 'error');
+                return;
+            }
+            if (!startImageInput.files.length && !endImageInput.files.length) {
+                showStatus('Please select at least one image for the beginning or the end.', 'error');
+                return;
+            }
+
+            try {
+                processBtn.disabled = true;
+                showStatus('Processing...', '');
+
+                // 2. Load the existing PDF
+                const existingPdfBytes = await pdfInput.files[0].arrayBuffer();
+                const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+
+                // Helper function to embed an image based on its type
+                async function embedImage(imgFile) {
+                    const imgBytes = await imgFile.arrayBuffer();
+                    if (imgFile.type === 'image/png') {
+                        return await pdfDoc.embedPng(imgBytes);
+                    } else if (imgFile.type === 'image/jpeg' || imgFile.type === 'image/jpg') {
+                        return await pdfDoc.embedJpg(imgBytes);
+                    } else {
+                        throw new Error(`Unsupported image format: ${imgFile.name}. Use PNG or JPG.`);
+                    }
+                }
+
+                // 3. Process images for the BEGINNING
+                if (startImageInput.files.length > 0) {
+                    const startImages = Array.from(startImageInput.files);
+                    for (let i = 0; i < startImages.length; i++) {
+                        const pdfImage = await embedImage(startImages[i]);
+                        const dims = pdfImage.scale(1);
+                        
+                        // Insert at index `i` so multiple images retain their selected order
+                        const page = pdfDoc.insertPage(i, [dims.width, dims.height]);
+                        page.drawImage(pdfImage, {
+                            x: 0,
+                            y: 0,
+                            width: dims.width,
+                            height: dims.height,
+                        });
+                    }
+                }
+
+                // 4. Process images for the END
+                if (endImageInput.files.length > 0) {
+                    const endImages = Array.from(endImageInput.files);
+                    for (let i = 0; i < endImages.length; i++) {
+                        const pdfImage = await embedImage(endImages[i]);
+                        const dims = pdfImage.scale(1);
+                        
+                        // Add to the end of the document
+                        const page = pdfDoc.addPage([dims.width, dims.height]);
+                        page.drawImage(pdfImage, {
+                            x: 0,
+                            y: 0,
+                            width: dims.width,
+                            height: dims.height,
+                        });
+                    }
+                }
+
+                // 5. Save the modified PDF
+                const pdfBytes = await pdfDoc.save();
+                
+                // 6. Trigger the download automatically
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const downloadLink = document.createElement('a');
+                
+                downloadLink.href = url;
+                // Prepend "modified_" to the original file name
+                downloadLink.download = `modified_${pdfInput.files[0].name}`;
+                
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+
+                showStatus('Done! Your PDF has been downloaded.', 'success');
+
+            } catch (error) {
+                console.error(error);
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+
+        // Helper function to update the status text and color
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            
+            // Reset classes
+            statusEl.classList.remove('error', 'success');
+            
+            if (type === 'error') {
+                statusEl.classList.add('error');
+            } else if (type === 'success') {
+                statusEl.classList.add('success');
+            }
+        }
+    </script>
+</body>
+</html>
