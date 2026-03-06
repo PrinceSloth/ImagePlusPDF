@@ -1,4 +1,4 @@
-ImagePlusPDF
+# ImagePlusPDF
 
 A simple, privacy-friendly, browser-based tool to insert images as new pages at the start and/or end of an existing PDF.
 
